@@ -28,12 +28,7 @@ from pymongo.server_api import ServerApi
 
 cluster = MongoClient("mongodb+srv://Admin:Pass@dataserver.cush8dg.mongodb.net/?retryWrites=true&w=majority")
 db = cluster["HackUTD"]
-collection = db["HDMIND"]
-# data1 = {"_id": 0, "name": "Rohith", "data": "test"}
-# data2 = {"_id": 1, "name": "Shreya", "data": "test2"}
-# data3 = {"_id": 2, "name": "Sri", "data": "test3"}
-
-# collection.insert_many([data1, data2, data3])
+collection = db["HDMind"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-n', '--stream_name', type=str, required=True,
@@ -48,8 +43,9 @@ streams = pylsl.resolve_stream('name', args.stream_name)
 if len(streams) == 0:
     raise RuntimeError(f'Found no LSL streams with name {args.stream_name}')
 inlet = pylsl.StreamInlet(streams[0])
-
+id=1
 while True:
     sample, timestamp = inlet.pull_sample()
     print(timestamp, sample)
-    collection.insert_one({"_id": timestamp, "Delta": sample[0], "Theta": sample[1], "Alpha": sample[2], "Beta": sample[3], "Gamma": sample[4]})
+    collection.insert_one({"_id": id, "Delta": sample[0], "Theta": sample[1], "Alpha": sample[2], "Beta": sample[3], "Gamma": sample[4]})
+    id+=1
