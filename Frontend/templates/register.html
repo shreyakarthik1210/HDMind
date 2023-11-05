@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--<link rel="stylesheet" href="{{url_for('static',filename='main.css')}}"> -->
+    <title>Registration</title>
+</head>
+<body>
+    <nav>
+        <h2>HD Mind</h2>
+    </nav> <br><br>
+    <center>
+        <div>
+            <h3>User Registration</h3><br>
+            <p>Please fill out the required fields to create an account.</p><br><br>
+        </div>
+        <form action="{{url_for('register')}}" method="POST">
+
+            <label for="firstName">First Name:</label>
+            <input type="text" id="firstName" name="firstName" required><br><br>
+
+            <label for="lastName">Last Name:</label>
+            <input type="text" id="lastName" name="lastName" required><br><br>
+
+            <label for="gender">Gender:</label>
+            <input type="text" id="gender" name="gender"><br><br>
+
+            <label for="username">Email:</label>
+            <input type="text" id="username" name="username" required><br><br>
+            
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required><br><br>
+            
+            <input type="submit" value="Submit">
+            <a href="{{url_for('login')}}">Login if registered</a>
+        </form>
+    </center>
+</body>
+</html>

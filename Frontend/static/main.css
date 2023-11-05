@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz@6..12&display=swap');
+
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Nunito Sans', sans-serif;
+}
+
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    min-height: 8vh;
+    padding: 1%;
+    background-color: rgb(146, 158, 149);
+}
+
+.loginContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 20%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-gap: 1em;
+}
+
+nav button {
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 1.5em;
+    padding: 0.5em 1em;
+}
+
+li {
+    list-style: none;
+}
+
+/* Change the color of the link on hover */
+nav a:hover {
+    background-color: #ccc1c1; /* Set the background color */
+    color: black; /* Set the text color */
+}
+
+.homeback{
+    background: url("https://runwayhealth.ca/wp-content/uploads/2021/07/Physiotherapy-for-the-knee.jpg");
+    background-repeat: no-repeat;
+    background-size: cover;
+    position: relative;
+}
