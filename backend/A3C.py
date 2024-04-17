@@ -1,122 +1,71 @@
-import tensorflow as tf
-import gym
-from collections import deque
+import argparse
+import pylsl
+import pymongo
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+import threading
 import numpy as np
-import torch
-import pickle
-import torch.optim as optim
 
-class MongoDBDataset:
-    def __init__(self, mongo_client, db_name, collection_name):
-        self.db = mongo_client["HackUTD"]
-        self.collection = self.db["HDMind"]
+# MongoDB setup
+cluster = MongoClient("mongodb+srv://Admin:Pass@dataserver.cush8dg.mongodb.net/?retryWrites=true&w=majority")
+db = cluster["HackUTD"]
+collection = db["HDMind"]
 
-    def add(self, state, action, reward):
-        document = {'state': Binary(pickle.dumps(state, -1)), 'action': action, 'reward': reward}
-        self.collection.insert_one(document)
+# Argument parser
+parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--stream_name', type=str, required=True,
+                    default='PetalStream_eeg', help='the name of the LSL stream')
+args = parser.parse_args()
 
-    def sample(self, batch_size):
-        documents = self.collection.aggregate([{'$sample': {'size': batch_size}}])
-        states, actions, rewards = [], [], []
-        for document in documents:
-            states.append(pickle.loads(document['state']))
-            actions.append(document['action'])
-            rewards.append(document['reward'])
-        return states, actions, rewards
+# Function to preprocess data
+def preprocess_data(sample):
+    return np.array(sample)
 
-    def delete_all(self):
-        self.collection.delete_many({})
+# A3C Worker
+class Worker(threading.Thread):
+    def __init__(self, worker_id):
+        super(Worker, self).__init__()
+        self.worker_id = worker_id
+        self.stop_signal = False
 
-class A3CAgent:
-    def __init__(self, environment, mongo_client, db_name, collection_name):
-        self.environment = environment
-        self.mongo_dataset = MongoDBDataset(mongo_client, db_name, collection_name)
+    def run(self):
+        print("Worker %d started" % self.worker_id)
+        while not self.stop_signal:
+            sample, timestamp = inlet.pull_sample()
+            processed_sample = preprocess_data(sample)
+            # Perform A3C algorithm training here
+            print("Worker %d processed sample: %s" % (self.worker_id, processed_sample))
+            collection.insert_one({"WorkerID": self.worker_id, "Sample": processed_sample})
+        print("Worker %d stopped" % self.worker_id)
 
-        self.sess = tf.Session()
-        self.policy_network = self.build_policy_network()
-        self.value_network = self.build_value_network()
-        self.sess.run(tf.global_variables_initializer())
+# Main function
+def main():
+    # Resolve LSL stream
+    print(f'Looking for a stream with name {args.stream_name}...')
+    streams = pylsl.resolve_stream('name', args.stream_name)
+    if len(streams) == 0:
+        raise RuntimeError(f'Found no LSL streams with name {args.stream_name}')
+    global inlet
+    inlet = pylsl.StreamInlet(streams[0])
 
-    def build_policy_network(self):
-        model = tf.keras.models.Sequential([
-            tf.keras.layers.Dense(128, activation='relu', input_shape=(self.environment.observation_space.shape[0],)),
-            tf.keras.layers.Dense(self.environment.action_space.n, activation='softmax')
-        ])
-        model.compile(loss='categorical_crossentropy', optimizer=tf.keras.optimizers.Adam(lr=0.001))
-        return model
+    # Create and start A3C workers
+    num_workers = 4 
+    workers = []
+    for i in range(num_workers):
+        worker = Worker(i)
+        workers.append(worker)
+        worker.start()
 
-    def build_value_network(self):
-        model = tf.keras.models.Sequential([
-            tf.keras.layers.Dense(128, activation='relu', input_shape=(self.environment.observation_space.shape[0],)),
-            tf.keras.layers.Dense(1, activation='linear')
-        ])
-        model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(lr=0.001))
-        return model
+    try:
+        # Keep the main thread alive
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("Stopping workers...")
+        for worker in workers:
+            worker.stop_signal = True
+        for worker in workers:
+            worker.join()
 
-    def compute_advantages(self, states, actions, rewards, gamma):
-        n_states = len(states)
-        values = np.zeros(n_states)
-        advantages = np.zeros(n_states)
-
-        # Compute value estimates using Monte Carlo estimation of rewards
-        for t in reversed(range(n_states)):
-            if t == n_states - 1:
-                values[t] = 0
-            else:
-                values[t] = rewards[t] + gamma * values[t + 1]
-
-            # Update advantages using GAE formula
-            delta = rewards[t] + gamma * values[t + 1] - values[t]
-            advantages[t] = delta + gamma  * advantages[t + 1]
-
-        return advantages
-
-    def update_policy_network(self, states, actions, advantages):
-         # Calculate the policy network's output
-        logits = self.policy_network(states)
-
-        # Convert the actions into one-hot vectors
-        action_one_hot = torch.zeros_like(logits)
-        action_one_hot.scatter_(1, actions.unsqueeze(-1), 1)
-
-        # Calculate the policy network's loss
-        policy_loss = -torch.sum(action_one_hot * logits, dim=1) * advantages
-        policy_loss = policy_loss.mean()
-
-        # Update the policy network
-        self.optimizer.zero_grad()
-        policy_loss.backward()
-        self.optimizer.step()
-
-    def update_value_network(self, states, rewards, gamma):
-        optimizer = optim.Adam(self.parameters(), lr=0.01)
-
-        for i in range(len(states) - 1, -1, -1):
-            target_value = rewards[i] + gamma * self(states[i+1]).item()
-            current_value = self(states[i]).item()
-
-            loss = (target_value - current_value) ** 2
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        return self
-
-    def train(self, batch_size, gamma):
-        states, actions, rewards = self.mongo_dataset.sample(batch_size)
-        advantages = self.compute_advantages(states, actions, rewards, gamma)
-        self.update_policy_network(states, actions, advantages)
-        self.update_value_network(states, rewards, gamma)
-
-    def run(self, num_episodes, max_steps, gamma):
-        for episode in range(num_episodes):
-            state = self.environment.reset()
-            for step in range(max_steps):
-                action = self.policy_network.act(state)
-                new_state, reward, done, _ = self.environment.step(action)
-                self.mongo_dataset.add(state, action, reward)
-                state = new_state
-                if done:
-                    break
-            self.train(32, gamma)
+if __name__ == "__main__":
+    main()
